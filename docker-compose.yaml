@@ -1,7 +1,7 @@
 version: '3'
 services:
-  ohm_coverage:
-    image: ohm/ohm_coverage:v1
+  ohm_tiles_coverage:
+    image: ohm/ohm_tiles_coverage:v1
     build:
       context: .
       dockerfile: Dockerfile

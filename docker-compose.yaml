@@ -1,0 +1,13 @@
+version: '3'
+services:
+  ohm_coverage:
+    image: ohm/ohm_coverage:v1
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+        - AWS_PROFILE=ohm
+    volumes:
+        - ./:/mnt
+        - ~/.aws/credentials:/root/.aws/credentials:ro
+    working_dir: /mnt

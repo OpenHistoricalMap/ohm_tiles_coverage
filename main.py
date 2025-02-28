@@ -21,14 +21,21 @@ gdf = gdf[gdf.geometry.notnull() & ~gdf.geometry.is_empty]
 if gdf.crs is not None and gdf.crs.to_epsg() != 4326:
     gdf = gdf.to_crs(epsg=4326)
 
+
 # Generate tile coverage
 def generate_tiles(geometry, zoom):
-    """Generate tile indices covering road geometries at a specific zoom level using supermercado."""
+    """Generate tile indices using mercantile instead of burntiles."""
     tiles = set()
-    features = [{"type": "Feature", "geometry": geom.__geo_interface__} for geom in geometry]
-    tile_bounds = list(sm.burntiles.burn(features, zoom))
-    tiles.update(tuple(tile) for tile in tile_bounds)
+
+    for geom in geometry:
+        if geom.is_empty:
+            continue
+        bbox = geom.bounds  # Get bounding box of geometry
+        tile_bounds = mercantile.tiles(bbox[0], bbox[1], bbox[2], bbox[3], zoom)
+        tiles.update(tile_bounds)
+
     return tiles
+
 
 # Generate tiles
 tiles = generate_tiles(gdf.geometry, zoom_level)
@@ -48,15 +55,17 @@ with open(tile_list_path, "w") as f:
             "type": "Feature",
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [[
-                    [tile_bounds.west, tile_bounds.south],
-                    [tile_bounds.east, tile_bounds.south],
-                    [tile_bounds.east, tile_bounds.north],
-                    [tile_bounds.west, tile_bounds.north],
-                    [tile_bounds.west, tile_bounds.south]
-                ]]
+                "coordinates": [
+                    [
+                        [tile_bounds.west, tile_bounds.south],
+                        [tile_bounds.east, tile_bounds.south],
+                        [tile_bounds.east, tile_bounds.north],
+                        [tile_bounds.west, tile_bounds.north],
+                        [tile_bounds.west, tile_bounds.south],
+                    ]
+                ],
             },
-            "properties": {"z": int(tile[2]), "x": int(tile[0]), "y": int(tile[1])}
+            "properties": {"z": int(tile[2]), "x": int(tile[0]), "y": int(tile[1])},
         }
         geojson_tiles["features"].append(feature)
         f.write(f"{tile[2]}/{tile[0]}/{tile[1]}\n")
@@ -65,8 +74,8 @@ with open(geojson_path, "w") as f:
     json.dump(geojson_tiles, f, indent=2)
 
 # Upload to AWS S3 using smart_open
-s3_tile_list = "s3://planet.openhistoricalmap.org/tile_coverage/tiles.list"
-s3_geojson = "s3://planet.openhistoricalmap.org/tile_coverage/tiles.geojson"
+s3_tile_list = f"s3://planet.openhistoricalmap.org/tile_coverage/tiles_boundary_{zoom_level}.list"
+s3_geojson = f"s3://planet.openhistoricalmap.org/tile_coverage/tiles_boundary_{zoom_level}.geojson"
 
 print(f"Uploading {tile_list_path} to {s3_tile_list}")
 with smart_open.open(s3_tile_list, "w") as s3_file:
@@ -78,5 +87,9 @@ with smart_open.open(s3_geojson, "w") as s3_file:
     with open(geojson_path, "r") as local_file:
         s3_file.write(local_file.read())
 
-print(f"Tile list available at: https://s3.amazonaws.com/planet.openhistoricalmap.org/tile_coverage/tiles.list")
-print(f"GeoJSON file available at: https://s3.amazonaws.com/planet.openhistoricalmap.org/tile_coverage/tiles.geojson")
+print(
+    f"Tile list available at: https://s3.amazonaws.com/planet.openhistoricalmap.org/tile_coverage/tiles_boundary_{zoom_level}.list"
+)
+print(
+    f"GeoJSON file available at: https://s3.amazonaws.com/planet.openhistoricalmap.org/tile_coverage/tiles_boundary_{zoom_level}.geojson"
+)
